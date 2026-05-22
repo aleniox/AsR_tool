@@ -40,6 +40,7 @@ class AppState:
         self.log_queue = None
         self.log_buffer = []
         self.progress_text = ""
+        self.latest_metric = ""
         self.training_running = False
 
     def cleanup_training(self):
@@ -276,19 +277,29 @@ def _format_log_line(text):
     return text
 
 
+def _is_metric_line(text):
+    return text.startswith("epoch=") or " | " in text and ("loss=" in text or "wer=" in text)
+
+
 def read_logs():
     if state.log_queue:
         while not state.log_queue.empty():
             try:
                 text = state.log_queue.get_nowait()
-                # Progress bar lines: keep only the latest, don't store in buffer
+                formatted = _format_log_line(text)
+                # Progress bar lines: keep only the latest
                 if "|" in text and "%" in text:
-                    state.progress_text = text
+                    state.progress_text = formatted
+                # Training metric lines (epoch=... | loss=...): keep only latest
+                elif _is_metric_line(formatted):
+                    state.latest_metric = formatted
                 else:
-                    state.log_buffer.append(_format_log_line(text))
+                    state.log_buffer.append(formatted)
             except queue.Empty:
                 break
     output = "\n".join(state.log_buffer)
+    if state.latest_metric:
+        output += f"\n{state.latest_metric}"
     if state.progress_text:
         output += f"\n{state.progress_text}"
     return output
