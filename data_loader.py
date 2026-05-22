@@ -95,7 +95,6 @@ def load_all_datasets(config: TrainingConfig):
     print("Preprocessing text labels for train dataset...")
     train_dataset = train_dataset.map(
         prepare_dataset, batched=True, batch_size=1000, num_proc=4, desc="Train",
-        disable_progress_bar=True,
     )
     return train_dataset
 
@@ -129,7 +128,6 @@ def load_all_test_datasets(config: TrainingConfig):
 
     test_ds = test_ds.map(
         prepare_dataset, batched=True, batch_size=1000, num_proc=4, desc="Test",
-        disable_progress_bar=True,
     )
     return test_ds
 
