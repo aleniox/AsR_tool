@@ -56,7 +56,6 @@ class WhisperTrainer(Seq2SeqTrainer):
             num_beams=1,
             temperature=0.0,
             return_dict_in_generate=True,
-            output_scores=True,
         )
 
         if isinstance(generated_tokens, dict):
@@ -146,6 +145,9 @@ def create_trainer(
 
 
 def run_training(trainer: WhisperTrainer, config: TrainingConfig, log_queue=None, stop_event=None):
+    # Suppress noisy warnings
+    os.environ["TRANSFORMERS_VERBOSITY"] = "error"
+
     def log_callback(msg):
         if log_queue:
             log_queue.put(msg)
@@ -188,26 +190,21 @@ def run_training(trainer: WhisperTrainer, config: TrainingConfig, log_queue=None
             self.stream.write(text)
 
             if "\r" in text:
-                # tqdm progress line: keep only the part after last \r
                 latest = text.rsplit("\r", 1)[-1].strip()
-                if latest:
-                    if self.queue:
-                        self.queue.put(latest)
+                if latest and self.queue:
+                    self.queue.put(latest)
                 self.line_buffer = ""
             if "\n" in text:
-                # Complete line(s)
                 for line in self.line_buffer.split("\n"):
                     stripped = line.strip()
-                    if stripped:
-                        if self.queue:
-                            self.queue.put(stripped)
+                    if stripped and self.queue:
+                        self.queue.put(stripped)
                 self.line_buffer = ""
 
         def flush(self):
-            if self.line_buffer.strip():
-                if self.queue:
-                    self.queue.put(self.line_buffer.strip())
-                self.line_buffer = ""
+            if self.line_buffer.strip() and self.queue:
+                self.queue.put(self.line_buffer.strip())
+            self.line_buffer = ""
             self.stream.flush()
 
     sys.stdout = QueueWriter(old_stdout, log_queue)

@@ -38,6 +38,7 @@ class AppState:
         self.stop_event = None
         self.log_queue = None
         self.log_buffer = []
+        self.progress_text = ""
         self.training_running = False
 
     def cleanup_training(self):
@@ -143,6 +144,10 @@ def load_data_action(
         with contextlib.redirect_stdout(f):
             state.train_dataset = load_all_datasets(state.config)
             state.test_dataset = load_all_test_datasets(state.config)
+
+        # Persist dataset paths to saved_config.json
+        state.config.save(CONFIG_SAVE_PATH)
+
         load_log = f.getvalue()
         load_log = "\n".join(
             line for line in load_log.replace("\r", "\n").splitlines() if line.strip()
@@ -232,16 +237,25 @@ def read_logs():
     if state.log_queue:
         while not state.log_queue.empty():
             try:
-                state.log_buffer.append(state.log_queue.get_nowait())
+                text = state.log_queue.get_nowait()
+                # Progress bar lines: keep only the latest, don't store in buffer
+                if "|" in text and "%" in text:
+                    state.progress_text = text
+                else:
+                    state.log_buffer.append(text)
             except queue.Empty:
                 break
-    return "\n".join(state.log_buffer)
+    output = "\n".join(state.log_buffer)
+    if state.progress_text:
+        output += f"\n{state.progress_text}"
+    return output
 
 
 def check_training_status():
     if state.training_thread and not state.training_thread.is_alive():
         if state.training_running:
             state.cleanup_training()
+            state.progress_text = ""
             return "Training completed!", gr.update(interactive=True), gr.update(interactive=False)
     return None, gr.update(), gr.update()
 
