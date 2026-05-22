@@ -55,7 +55,7 @@ state = AppState()
 
 def update_config_from_ui(
     model_name, output_dir, lr, batch_size, grad_accum, epochs,
-    warmup, fp16, bf16, augmentation, wandb_project, wandb_key,
+    warmup, precision, augmentation, wandb_project, wandb_key,
     gpu_device, resume, max_test_samples,
     eval_batch_size, eval_steps, save_steps, logging_steps,
     save_total, max_label_len, gen_max_len, gen_beams,
@@ -72,8 +72,8 @@ def update_config_from_ui(
     state.config.gradient_accumulation_steps = int(grad_accum)
     state.config.num_train_epochs = int(epochs)
     state.config.warmup_steps = int(warmup)
-    state.config.fp16 = fp16
-    state.config.bf16 = bf16
+    state.config.fp16 = precision == "fp16"
+    state.config.bf16 = precision == "bf16"
     state.config.apply_augmentation = augmentation
     state.config.wandb_project = wandb_project
     state.config.wandb_api_key = wandb_key
@@ -357,8 +357,11 @@ def build_app():
                         predict_ts = gr.Checkbox(label="Predict Timestamps", value=state.config.predict_timestamps)
 
                 with gr.Row():
-                    fp16 = gr.Checkbox(label="FP16", value=state.config.fp16)
-                    bf16 = gr.Checkbox(label="BF16", value=state.config.bf16)
+                    precision = gr.Radio(
+                        label="Precision",
+                        choices=["fp16", "bf16", "none"],
+                        value="fp16" if state.config.fp16 else ("bf16" if state.config.bf16 else "none"),
+                    )
                     augmentation = gr.Checkbox(label="Apply Augmentation", value=state.config.apply_augmentation)
                     resume = gr.Checkbox(label="Resume from Checkpoint", value=state.config.resume_from_checkpoint)
 
@@ -378,7 +381,7 @@ def build_app():
                 save_config_btn.click(
                     fn=update_config_from_ui,
                     inputs=[model_name, output_dir, lr, batch_size, grad_accum,
-                            epochs, warmup, fp16, bf16, augmentation, wandb_project,
+                            epochs, warmup, precision, augmentation, wandb_project,
                             wandb_key, gpu_device, resume, max_test,
                             eval_batch_size, eval_steps, save_steps, logging_steps,
                             save_total, max_label_len, gen_max_len, gen_beams,
