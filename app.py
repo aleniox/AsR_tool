@@ -24,6 +24,51 @@ os.environ["WANDB_SILENT"] = "true"
 
 CONFIG_SAVE_PATH = "saved_config.json"
 
+CUSTOM_CSS = """
+:root {
+  --primary: #6366f1;
+  --primary-dark: #4f46e5;
+  --bg: #0f1117;
+  --card: #1a1d2e;
+  --border: #2a2d3e;
+  --text: #e2e8f0;
+  --text-muted: #94a3b8;
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+}
+.gradio-container { background: var(--bg) !important; max-width: 1400px !important; margin: 0 auto !important; }
+.tabs { gap: 0 !important; }
+.tab-nav { background: var(--card) !important; border: 1px solid var(--border) !important; border-radius: 12px 12px 0 0 !important; padding: 4px !important; }
+.tab-nav button { border-radius: 8px !important; padding: 8px 20px !important; font-weight: 600 !important; font-size: 14px !important; border: none !important; background: transparent !important; color: var(--text-muted) !important; transition: all 0.2s !important; }
+.tab-nav button.selected { background: var(--primary) !important; color: #fff !important; box-shadow: 0 4px 12px rgba(99,102,241,0.3) !important; }
+.tab-nav button:hover:not(.selected) { background: rgba(99,102,241,0.1) !important; color: var(--text) !important; }
+.panel { border: 1px solid var(--border) !important; border-top: none !important; border-radius: 0 0 12px 12px !important; background: var(--card) !important; padding: 20px !important; }
+.gr-box { border: 1px solid var(--border) !important; border-radius: 10px !important; background: var(--bg) !important; padding: 16px !important; margin-bottom: 12px !important; }
+label { font-weight: 600 !important; font-size: 13px !important; color: var(--text) !important; margin-bottom: 4px !important; }
+input, select, textarea { background: var(--card) !important; border: 1px solid var(--border) !important; border-radius: 8px !important; color: var(--text) !important; padding: 8px 12px !important; }
+input:focus, select:focus, textarea:focus { border-color: var(--primary) !important; box-shadow: 0 0 0 2px rgba(99,102,241,0.2) !important; }
+.gr-button { border-radius: 8px !important; font-weight: 600 !important; padding: 8px 20px !important; transition: all 0.2s !important; border: none !important; }
+.gr-button.primary { background: var(--primary) !important; color: #fff !important; }
+.gr-button.primary:hover { background: var(--primary-dark) !important; box-shadow: 0 4px 12px rgba(99,102,241,0.3) !important; }
+.gr-button.secondary { background: transparent !important; border: 1px solid var(--border) !important; color: var(--text) !important; }
+.gr-button.secondary:hover { border-color: var(--primary) !important; color: var(--primary) !important; }
+.gr-button.stop { background: var(--danger) !important; color: #fff !important; }
+.gr-button.stop:hover { background: #dc2626 !important; }
+.accordion { border: 1px solid var(--border) !important; border-radius: 10px !important; margin-bottom: 8px !important; overflow: hidden !important; }
+.accordion > .label { background: var(--bg) !important; padding: 10px 16px !important; font-weight: 600 !important; cursor: pointer !important; }
+.accordion > .content { padding: 16px !important; background: var(--bg) !important; }
+.header-section { text-align: center; padding: 24px 0 8px 0; }
+.header-section h1 { font-size: 28px; font-weight: 700; background: linear-gradient(135deg, #6366f1, #a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin: 0; }
+.header-section p { color: var(--text-muted); margin: 4px 0 0 0; font-size: 14px; }
+.section-title { font-size: 14px; font-weight: 700; color: var(--primary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid var(--border); }
+.status-ok { color: var(--success); font-weight: 600; }
+.status-warn { color: var(--warning); font-weight: 600; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+.badge-vi { background: rgba(99,102,241,0.15); color: #818cf8; }
+.badge-en { background: rgba(34,197,94,0.15); color: #4ade80; }
+"""
+
 
 class AppState:
     def __init__(self):
@@ -110,7 +155,7 @@ def update_config_from_ui(
     state.config.logprob_threshold = float(logprob_thresh)
     state.config.no_speech_threshold = float(no_speech_thresh)
     state.config.save(CONFIG_SAVE_PATH)
-    return f"Configuration saved to {CONFIG_SAVE_PATH}!"
+    return "Configuration saved!"
 
 
 def load_model_action():
@@ -147,7 +192,6 @@ def load_data_action(
             state.train_dataset = load_all_datasets(state.config)
             state.test_dataset = load_all_test_datasets(state.config)
 
-        # Persist dataset paths to saved_config.json
         state.config.save(CONFIG_SAVE_PATH)
 
         load_log = f.getvalue()
@@ -181,7 +225,7 @@ def save_data_paths_action(local_train_str, local_test_str, online_train_str, on
         except json.JSONDecodeError:
             return "Invalid JSON for online train datasets"
     state.config.save(CONFIG_SAVE_PATH)
-    return f"Dataset paths saved to {CONFIG_SAVE_PATH}!"
+    return "Dataset paths saved!"
 
 
 # ─── TRAINING ─────────────────────────────────────────────
@@ -193,7 +237,6 @@ def start_training_action(model_name):
     if state.train_dataset is None:
         return "Please load datasets first!", gr.update(interactive=False), gr.update(interactive=True)
 
-    # Update model name from UI and always reload model to match config
     state.config.model_name_or_path = model_name
     from model_setup import setup_model
     f = io.StringIO()
@@ -250,7 +293,6 @@ def stop_training_action():
 
 
 def _format_log_line(text):
-    """Format training metrics dict into a clean single-line summary."""
     text = text.strip()
     if text.startswith("{") and text.endswith("}"):
         try:
@@ -287,10 +329,8 @@ def read_logs():
             try:
                 text = state.log_queue.get_nowait()
                 formatted = _format_log_line(text)
-                # Progress bar lines: keep only the latest
                 if "|" in text and "%" in text:
                     state.progress_text = formatted
-                # Training metric lines (epoch=... | loss=...): keep only latest
                 elif _is_metric_line(formatted):
                     state.latest_metric = formatted
                 else:
@@ -347,54 +387,56 @@ def refresh_checkpoints(output_dir):
 
 # ─── BUILD UI ─────────────────────────────────────────────
 
+def make_section(title):
+    return gr.HTML(f'<div class="section-title">{title}</div>')
+
+
 def build_app():
-    # Load saved config if exists
     if os.path.exists(CONFIG_SAVE_PATH):
         try:
             state.config = TrainingConfig.load(CONFIG_SAVE_PATH)
         except Exception:
             pass
 
-    with gr.Blocks(title="Whisper Bilingual Training UI", theme=gr.themes.Soft()) as app:
-        gr.Markdown("# Whisper Bilingual Training & Inference UI")
-        gr.Markdown("Train Whisper on Vietnamese + English bilingual datasets")
+    with gr.Blocks(title="Whisper Bilingual Training UI", theme=gr.themes.Soft(), css=CUSTOM_CSS) as app:
+        gr.HTML("""
+        <div class="header-section">
+            <h1>Whisper Bilingual Training</h1>
+            <p>Train Whisper on Vietnamese &amp; English bilingual datasets</p>
+        </div>
+        """)
 
-        with gr.Tabs():
+        with gr.Tabs(elem_classes="tabs"):
             # ─── TAB 1: CONFIG ───────────────────────────
-            with gr.TabItem("Config"):
-                with gr.Group():
-                    gr.Markdown("### Model & Output")
-                    model_name = gr.Textbox(
-                        label="Model Name or Path", value=state.config.model_name_or_path
-                    )
-                    output_dir = gr.Textbox(
-                        label="Output Directory", value=state.config.output_dir
-                    )
+            with gr.TabItem("Config", elem_classes="panel"):
+                with gr.Row():
+                    model_name = gr.Textbox(label="Model", value=state.config.model_name_or_path, scale=3)
+                    output_dir = gr.Textbox(label="Output Directory", value=state.config.output_dir, scale=2)
 
-                with gr.Group():
-                    gr.Markdown("### Training Hyperparameters")
+                with gr.Row():
+                    save_config_btn = gr.Button("Save Configuration", variant="primary", scale=1)
+                    load_model_btn = gr.Button("Load Model", variant="secondary", scale=1)
+
+                config_status = gr.Textbox(label="Status", interactive=False)
+
+                with gr.Accordion("Training Hyperparameters", open=True, elem_classes="accordion"):
                     with gr.Row():
                         lr = gr.Number(label="Learning Rate", value=state.config.learning_rate, step=1e-6)
                         batch_size = gr.Number(label="Train Batch Size", value=state.config.per_device_train_batch_size, step=1, precision=0)
-                        grad_accum = gr.Number(label="Gradient Accumulation Steps", value=state.config.gradient_accumulation_steps, step=1, precision=0)
+                        grad_accum = gr.Number(label="Gradient Accumulation", value=state.config.gradient_accumulation_steps, step=1, precision=0)
+                        epochs = gr.Number(label="Epochs", value=state.config.num_train_epochs, step=1, precision=0)
                     with gr.Row():
-                        epochs = gr.Number(label="Num Epochs", value=state.config.num_train_epochs, step=1, precision=0)
                         warmup = gr.Number(label="Warmup Steps", value=state.config.warmup_steps, step=10, precision=0)
                         eval_batch_size = gr.Number(label="Eval Batch Size", value=state.config.per_device_eval_batch_size, step=1, precision=0)
+                        max_label_len = gr.Number(label="Max Label Length", value=state.config.max_label_length, step=8, precision=0)
+                        gen_max_len = gr.Number(label="Gen Max Length", value=state.config.generation_max_length, step=10, precision=0)
                     with gr.Row():
                         eval_steps = gr.Number(label="Eval Steps", value=state.config.eval_steps, step=100, precision=0)
                         save_steps = gr.Number(label="Save Steps", value=state.config.save_steps, step=100, precision=0)
                         logging_steps = gr.Number(label="Logging Steps", value=state.config.logging_steps, step=5, precision=0)
-                    with gr.Row():
-                        save_total = gr.Number(label="Save Total Limit", value=state.config.save_total_limit, step=1, precision=0)
-                        max_label_len = gr.Number(label="Max Label Length", value=state.config.max_label_length, step=8, precision=0)
-                        gen_max_len = gr.Number(label="Generation Max Length", value=state.config.generation_max_length, step=10, precision=0)
-                    with gr.Row():
-                        gen_beams = gr.Number(label="Num Beams", value=state.config.generation_num_beams, step=1, precision=0)
-                        max_test = gr.Number(label="Max Test Samples", value=state.config.max_test_samples, step=100, precision=0)
+                        save_total = gr.Number(label="Save Limit", value=state.config.save_total_limit, step=1, precision=0)
 
-                with gr.Group():
-                    gr.Markdown("### Strategy & Reporting")
+                with gr.Accordion("Strategy & Reporting", open=False, elem_classes="accordion"):
                     with gr.Row():
                         eval_strategy = gr.Dropdown(label="Eval Strategy", choices=["steps", "epoch", "no"], value=state.config.eval_strategy)
                         save_strategy = gr.Dropdown(label="Save Strategy", choices=["steps", "epoch", "no"], value=state.config.save_strategy)
@@ -402,49 +444,41 @@ def build_app():
                     with gr.Row():
                         metric_best = gr.Textbox(label="Metric for Best Model", value=state.config.metric_for_best_model)
                         label_names_str = gr.Textbox(label="Label Names (JSON)", value=state.config.label_names)
-                        grad_ckpt_kwargs = gr.Textbox(label="Grad Checkpoint Kwargs (JSON)", value=state.config.gradient_checkpointing_kwargs)
+                        grad_ckpt_kwargs = gr.Textbox(label="Grad CKPT Kwargs (JSON)", value=state.config.gradient_checkpointing_kwargs)
                     with gr.Row():
                         predict_gen = gr.Checkbox(label="Predict with Generate", value=state.config.predict_with_generate)
                         remove_cols = gr.Checkbox(label="Remove Unused Columns", value=state.config.remove_unused_columns)
                         load_best = gr.Checkbox(label="Load Best Model at End", value=state.config.load_best_model_at_end)
-                    with gr.Row():
                         greater_better = gr.Checkbox(label="Greater is Better", value=state.config.greater_is_better)
                         pred_loss_only = gr.Checkbox(label="Prediction Loss Only", value=state.config.prediction_loss_only)
                         grad_ckpt = gr.Checkbox(label="Gradient Checkpointing", value=state.config.gradient_checkpointing)
 
-                with gr.Group():
-                    gr.Markdown("### Generation Config (Anti-Hallucination)")
+                with gr.Accordion("Anti-Hallucination", open=False, elem_classes="accordion"):
                     with gr.Row():
                         no_repeat = gr.Number(label="No Repeat Ngram Size", value=state.config.no_repeat_ngram_size, step=1, precision=0)
-                        compress_ratio = gr.Number(label="Compression Ratio Threshold", value=state.config.compression_ratio_threshold, step=0.1)
+                        compress_ratio = gr.Number(label="Compression Ratio", value=state.config.compression_ratio_threshold, step=0.1)
+                        gen_beams = gr.Number(label="Num Beams", value=state.config.generation_num_beams, step=1, precision=0)
                     with gr.Row():
                         logprob_thresh = gr.Number(label="Logprob Threshold", value=state.config.logprob_threshold, step=0.1)
                         no_speech_thresh = gr.Number(label="No Speech Threshold", value=state.config.no_speech_threshold, step=0.05)
+                        max_test = gr.Number(label="Max Test Samples", value=state.config.max_test_samples, step=100, precision=0)
                     with gr.Row():
                         cond_prev = gr.Checkbox(label="Condition on Previous Text", value=state.config.condition_on_previous_text)
                         predict_ts = gr.Checkbox(label="Predict Timestamps", value=state.config.predict_timestamps)
+                        augmentation = gr.Checkbox(label="Apply Augmentation", value=state.config.apply_augmentation)
+                        resume = gr.Checkbox(label="Resume from Checkpoint", value=state.config.resume_from_checkpoint)
 
-                with gr.Row():
-                    precision = gr.Radio(
-                        label="Precision",
-                        choices=["fp16", "bf16", "none"],
-                        value="fp16" if state.config.fp16 else ("bf16" if state.config.bf16 else "none"),
-                    )
-                    augmentation = gr.Checkbox(label="Apply Augmentation", value=state.config.apply_augmentation)
-                    resume = gr.Checkbox(label="Resume from Checkpoint", value=state.config.resume_from_checkpoint)
-
-                with gr.Group():
-                    gr.Markdown("### WandB & GPU")
+                with gr.Accordion("WandB & GPU", open=False, elem_classes="accordion"):
                     with gr.Row():
                         wandb_project = gr.Textbox(label="WandB Project", value=state.config.wandb_project)
                         wandb_key = gr.Textbox(label="WandB API Key", type="password", value=state.config.wandb_api_key)
                         gpu_device = gr.Textbox(label="CUDA Device", value=state.config.cuda_visible_devices)
-
-                with gr.Row():
-                    save_config_btn = gr.Button("Save Configuration", variant="primary")
-                    load_model_btn = gr.Button("Load Model", variant="secondary")
-
-                config_status = gr.Textbox(label="Status", interactive=False)
+                    with gr.Row():
+                        precision = gr.Radio(
+                            label="Precision",
+                            choices=["fp16", "bf16", "none"],
+                            value="fp16" if state.config.fp16 else ("bf16" if state.config.bf16 else "none"),
+                        )
 
                 save_config_btn.click(
                     fn=update_config_from_ui,
@@ -467,30 +501,30 @@ def build_app():
                 )
 
             # ─── TAB 2: DATA ─────────────────────────────
-            with gr.TabItem("Data"):
-                gr.Markdown("### Dataset Configuration")
+            with gr.TabItem("Data", elem_classes="panel"):
+                gr.Markdown("""<div class="section-title">Dataset Configuration</div>""")
                 gr.Markdown("Paths: one per line")
 
                 with gr.Row():
                     with gr.Column():
                         local_train = gr.Textbox(
-                            label="Local Train Datasets (paths)",
+                            label="Local Train Datasets",
                             lines=6,
                             value="\n".join(state.config.local_train_datasets),
                         )
                         online_train = gr.Textbox(
-                            label="Online Train Datasets (JSON list)",
+                            label="Online Train Datasets (JSON)",
                             lines=3,
                             placeholder='[{"path": "...", "split": "train", ...}]',
                         )
                     with gr.Column():
                         local_test = gr.Textbox(
-                            label="Local Test Datasets (paths)",
+                            label="Local Test Datasets",
                             lines=6,
                             value="\n".join(state.config.local_test_datasets),
                         )
                         online_test = gr.Textbox(
-                            label="Online Test Datasets (JSON list)",
+                            label="Online Test Datasets (JSON)",
                             lines=3,
                             placeholder='[{"path": "...", "split": "test", ...}]',
                         )
@@ -513,19 +547,19 @@ def build_app():
                 )
 
             # ─── TAB 3: TRAINING ─────────────────────────
-            with gr.TabItem("Training"):
+            with gr.TabItem("Training", elem_classes="panel"):
                 with gr.Row():
-                    start_btn = gr.Button("Start Training", variant="primary", size="lg")
-                    stop_btn = gr.Button("Stop Training", variant="stop", size="lg", interactive=False)
+                    with gr.Column(scale=2):
+                        with gr.Group():
+                            start_btn = gr.Button("Start Training", variant="primary", size="lg")
+                            stop_btn = gr.Button("Stop Training", variant="stop", size="lg", interactive=False)
+                    with gr.Column(scale=3):
+                        train_status = gr.Textbox(label="Status", interactive=False)
 
-                train_status = gr.Textbox(label="Status", interactive=False)
-
-                gr.Markdown("### Training Logs")
+                gr.Markdown("""<div class="section-title">Training Logs</div>""")
                 log_output = gr.Textbox(label="Logs", lines=25, max_lines=200, interactive=False)
+                refresh_logs_btn = gr.Button("Refresh Logs", variant="secondary")
 
-                refresh_logs_btn = gr.Button("Refresh Logs")
-
-                # Training control
                 start_btn.click(
                     fn=start_training_action,
                     inputs=[model_name],
@@ -555,33 +589,36 @@ def build_app():
                 )
 
             # ─── TAB 4: INFERENCE ────────────────────────
-            with gr.TabItem("Inference"):
-                gr.Markdown("### Transcribe Audio")
+            with gr.TabItem("Inference", elem_classes="panel"):
+                gr.Markdown("""<div class="section-title">Transcribe Audio</div>""")
 
                 with gr.Row():
-                    with gr.Column():
+                    with gr.Column(scale=3):
                         model_path_drop = gr.Dropdown(
                             label="Model Checkpoint",
                             choices=[],
                             interactive=True,
                         )
+                    with gr.Column(scale=2):
                         output_dir_box = gr.Textbox(
                             label="Output Directory",
                             value="weights/whisper-medium-bilingual-vi-en",
                         )
-                        refresh_btn = gr.Button("Refresh Checkpoints")
-                    with gr.Column():
+                    with gr.Column(scale=1):
                         lang_drop = gr.Dropdown(
                             label="Language",
                             choices=["auto", "vi", "en"],
                             value="auto",
                         )
+                    with gr.Column(scale=1):
+                        refresh_btn = gr.Button("Refresh", variant="secondary")
 
                 audio_input = gr.Audio(
                     label="Audio Input", type="filepath", sources=["upload", "microphone"]
                 )
 
-                transcribe_btn = gr.Button("Transcribe", variant="primary", size="lg")
+                with gr.Row():
+                    transcribe_btn = gr.Button("Transcribe", variant="primary", size="lg")
                 transcript_output = gr.Textbox(label="Transcript", lines=5)
 
                 refresh_btn.click(
