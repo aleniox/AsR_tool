@@ -2,6 +2,8 @@ import os
 import json
 import threading
 import queue
+import io
+import contextlib
 import gradio as gr
 
 from config import TrainingConfig
@@ -106,8 +108,11 @@ def update_config_from_ui(
 
 def load_model_action():
     try:
-        state.model, state.feature_extractor, state.tokenizer, state.processor = setup_model(state.config)
-        return f"Model loaded: {state.config.model_name_or_path}"
+        f = io.StringIO()
+        with contextlib.redirect_stdout(f):
+            state.model, state.feature_extractor, state.tokenizer, state.processor = setup_model(state.config)
+        load_log = f.getvalue()
+        return load_log.strip()
     except Exception as e:
         return f"Error loading model: {e}"
 
@@ -116,6 +121,7 @@ def load_data_action(
     local_train_str, local_test_str,
     online_train_str, online_test_str,
 ):
+    f = io.StringIO()
     try:
         if local_train_str:
             paths = [p.strip() for p in local_train_str.split("\n") if p.strip()]
@@ -129,8 +135,14 @@ def load_data_action(
             except json.JSONDecodeError:
                 return "Invalid JSON for online train datasets"
 
-        state.train_dataset = load_all_datasets(state.config)
-        state.test_dataset = load_all_test_datasets(state.config)
+        print("Loading and preprocessing train datasets...")
+        with contextlib.redirect_stdout(f):
+            state.train_dataset = load_all_datasets(state.config)
+            state.test_dataset = load_all_test_datasets(state.config)
+        load_log = f.getvalue()
+        load_log = "\n".join(
+            line for line in load_log.replace("\r", "\n").splitlines() if line.strip()
+        )
 
         train_stats = show_lang_stats_str(state.train_dataset, "Train Dataset")
         test_stats = show_lang_stats_str(state.test_dataset, "Test Dataset")
@@ -141,10 +153,10 @@ def load_data_action(
             samples.append(f"#{i}: [{s['language']}] {s['sentence'][:100]}")
 
         return (
-            f"{train_stats}\n\n{test_stats}\n\n--- Preview ---\n" + "\n".join(samples)
+            f"{load_log}\n\n{train_stats}\n\n{test_stats}\n\n--- Preview ---\n" + "\n".join(samples)
         )
     except Exception as e:
-        return f"Error loading data: {e}"
+        return f"Error loading data: {e}\n{f.getvalue()}"
 
 
 # ─── TRAINING ─────────────────────────────────────────────
@@ -159,10 +171,13 @@ def start_training_action(model_name):
     # Update model name from UI and always reload model to match config
     state.config.model_name_or_path = model_name
     from model_setup import setup_model
+    f = io.StringIO()
     try:
-        state.model, state.feature_extractor, state.tokenizer, state.processor = setup_model(state.config)
+        with contextlib.redirect_stdout(f):
+            state.model, state.feature_extractor, state.tokenizer, state.processor = setup_model(state.config)
+        load_log = f.getvalue()
     except Exception as e:
-        return f"Error loading model: {e}", gr.update(interactive=False), gr.update(interactive=True)
+        return f"Error loading model '{model_name}': {e}", gr.update(interactive=False), gr.update(interactive=True)
 
     state.stop_event = threading.Event()
     state.log_queue = queue.Queue()
@@ -192,7 +207,7 @@ def start_training_action(model_name):
     state.training_thread.start()
 
     return (
-        "Training started! Open the Logs tab to monitor.",
+        f"Training started! Model: {model_name}\n{load_log}",
         gr.update(interactive=False),
         gr.update(interactive=True),
     )
