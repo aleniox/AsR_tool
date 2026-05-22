@@ -447,7 +447,7 @@ def build_app():
                 train_status = gr.Textbox(label="Status", interactive=False)
 
                 gr.Markdown("### Training Logs")
-                log_output = gr.Textbox(label="Logs", lines=20, interactive=False)
+                log_output = gr.Textbox(label="Logs", lines=25, max_lines=200, interactive=False)
 
                 refresh_logs_btn = gr.Button("Refresh Logs")
 
@@ -473,7 +473,7 @@ def build_app():
                     logs = read_logs()
                     return status or "Idle", start_upd, stop_upd, logs
 
-                training_timer = gr.Timer(3)
+                training_timer = gr.Timer(1)
                 training_timer.tick(
                     fn=auto_refresh,
                     inputs=[],

@@ -173,22 +173,50 @@ def run_training(trainer: WhisperTrainer, config: TrainingConfig, log_queue=None
     if stop_event:
         trainer.add_callback(StopCallback())
 
-    # Redirect stdout to capture all Trainer output into log_queue
+    # Redirect stdout + stderr to capture all output into log_queue
     old_stdout = sys.stdout
-    class QueueWriter:
-        def write(self, text):
-            if text.strip():
-                if log_queue:
-                    log_queue.put(text)
-            old_stdout.write(text)
-        def flush(self):
-            old_stdout.flush()
+    old_stderr = sys.stderr
 
-    sys.stdout = QueueWriter()
+    class QueueWriter:
+        def __init__(self, stream, log_queue):
+            self.stream = stream
+            self.queue = log_queue
+            self.line_buffer = ""
+
+        def write(self, text):
+            self.line_buffer += text
+            self.stream.write(text)
+
+            if "\r" in text:
+                # tqdm progress line: keep only the part after last \r
+                latest = text.rsplit("\r", 1)[-1].strip()
+                if latest:
+                    if self.queue:
+                        self.queue.put(latest)
+                self.line_buffer = ""
+            if "\n" in text:
+                # Complete line(s)
+                for line in self.line_buffer.split("\n"):
+                    stripped = line.strip()
+                    if stripped:
+                        if self.queue:
+                            self.queue.put(stripped)
+                self.line_buffer = ""
+
+        def flush(self):
+            if self.line_buffer.strip():
+                if self.queue:
+                    self.queue.put(self.line_buffer.strip())
+                self.line_buffer = ""
+            self.stream.flush()
+
+    sys.stdout = QueueWriter(old_stdout, log_queue)
+    sys.stderr = QueueWriter(old_stderr, log_queue)
     try:
         trainer.train(resume_from_checkpoint=resume_from_checkpoint)
     finally:
         sys.stdout = old_stdout
+        sys.stderr = old_stderr
 
     final_dir = f"{config.output_dir}/final_model"
     trainer.save_model(final_dir)
