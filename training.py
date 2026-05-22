@@ -1,6 +1,7 @@
 import os
 import sys
 import json
+import queue
 import torch
 import transformers
 import evaluate
@@ -144,7 +145,7 @@ def create_trainer(
     return trainer
 
 
-def run_training(trainer: WhisperTrainer, config: TrainingConfig, log_queue=None, stop_event=None):
+def run_training(trainer: WhisperTrainer, config: TrainingConfig, log_queue=None, eval_queue=None, stop_event=None):
     # Suppress noisy warnings
     os.environ["TRANSFORMERS_VERBOSITY"] = "error"
 
@@ -179,36 +180,63 @@ def run_training(trainer: WhisperTrainer, config: TrainingConfig, log_queue=None
     old_stdout = sys.stdout
     old_stderr = sys.stderr
 
+    class EvalState:
+        def __init__(self):
+            self.in_eval = False
+
+    eval_state = EvalState()
+
     class QueueWriter:
-        def __init__(self, stream, log_queue):
+        def __init__(self, stream, log_queue, eval_queue, eval_state):
             self.stream = stream
-            self.queue = log_queue
+            self.log_queue = log_queue
+            self.eval_queue = eval_queue
+            self.eval_state = eval_state
             self.line_buffer = ""
+
+        def _get_queue(self):
+            return self.eval_queue if self.eval_state.in_eval else self.log_queue
 
         def write(self, text):
             self.line_buffer += text
             self.stream.write(text)
+            q = self._get_queue()
 
             if "\r" in text:
                 latest = text.rsplit("\r", 1)[-1].strip()
-                if latest and self.queue:
-                    self.queue.put(latest)
+                if latest and q:
+                    q.put(latest)
                 self.line_buffer = ""
             if "\n" in text:
                 for line in self.line_buffer.split("\n"):
                     stripped = line.strip()
-                    if stripped and self.queue:
-                        self.queue.put(stripped)
+                    if stripped and q:
+                        q.put(stripped)
                 self.line_buffer = ""
 
         def flush(self):
-            if self.line_buffer.strip() and self.queue:
-                self.queue.put(self.line_buffer.strip())
+            q = self._get_queue()
+            if self.line_buffer.strip() and q:
+                q.put(self.line_buffer.strip())
             self.line_buffer = ""
             self.stream.flush()
 
-    sys.stdout = QueueWriter(old_stdout, log_queue)
-    sys.stderr = QueueWriter(old_stderr, log_queue)
+    # Patch trainer to detect eval start/end
+    original_evaluation_loop = trainer.evaluation_loop
+
+    def patched_evaluation_loop(*args, **kwargs):
+        eval_state.in_eval = True
+        try:
+            return original_evaluation_loop(*args, **kwargs)
+        finally:
+            eval_state.in_eval = False
+
+    trainer.evaluation_loop = patched_evaluation_loop
+
+    if eval_queue is None and log_queue is not None:
+        eval_queue = queue.Queue()
+    sys.stdout = QueueWriter(old_stdout, log_queue, eval_queue, eval_state)
+    sys.stderr = QueueWriter(old_stderr, log_queue, eval_queue, eval_state)
     try:
         trainer.train(resume_from_checkpoint=resume_from_checkpoint)
     finally:

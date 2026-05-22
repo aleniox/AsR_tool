@@ -83,7 +83,9 @@ class AppState:
         self.training_thread = None
         self.stop_event = None
         self.log_queue = None
+        self.eval_queue = None
         self.log_buffer = []
+        self.eval_buffer = []
         self.progress_text = ""
         self.latest_metric = ""
         self.training_running = False
@@ -93,6 +95,7 @@ class AppState:
         self.training_thread = None
         self.stop_event = None
         self.log_queue = None
+        self.eval_queue = None
         cleanup()
 
 
@@ -249,6 +252,7 @@ def start_training_action(model_name):
 
     state.stop_event = threading.Event()
     state.log_queue = queue.Queue()
+    state.eval_queue = queue.Queue()
 
     try:
         os.environ["CUDA_VISIBLE_DEVICES"] = state.config.cuda_visible_devices
@@ -269,7 +273,7 @@ def start_training_action(model_name):
     state.training_running = True
     state.training_thread = threading.Thread(
         target=run_training,
-        args=(state.trainer, state.config, state.log_queue, state.stop_event),
+        args=(state.trainer, state.config, state.log_queue, state.eval_queue, state.stop_event),
         daemon=True,
     )
     state.training_thread.start()
@@ -343,6 +347,17 @@ def read_logs():
     if state.progress_text:
         output += f"\n{state.progress_text}"
     return output
+
+
+def read_eval_logs():
+    if state.eval_queue:
+        while not state.eval_queue.empty():
+            try:
+                text = state.eval_queue.get_nowait()
+                state.eval_buffer.append(text)
+            except queue.Empty:
+                break
+    return "\n".join(state.eval_buffer[-50:])
 
 
 def check_training_status():
@@ -556,14 +571,43 @@ def build_app():
                     with gr.Column(scale=3):
                         train_status = gr.Textbox(label="Status", interactive=False)
 
-                gr.Markdown("""<div class="section-title">Training Logs</div>""")
-                log_output = gr.Textbox(label="Logs", lines=25, max_lines=200, interactive=False)
+                with gr.Row():
+                    with gr.Column(scale=2):
+                        gr.Markdown("""<div class="section-title">Training Logs</div>""")
+                        log_output = gr.Textbox(label="Logs", lines=20, max_lines=200, interactive=False)
+                    with gr.Column(scale=1):
+                        gr.Markdown("""<div class="section-title">Eval Progress</div>""")
+                        eval_output = gr.Textbox(label="Evaluation", lines=8, max_lines=50, interactive=False)
+
                 refresh_logs_btn = gr.Button("Refresh Logs", variant="secondary")
 
                 start_btn.click(
                     fn=start_training_action,
                     inputs=[model_name],
                     outputs=[train_status, start_btn, stop_btn],
+                )
+                stop_btn.click(
+                    fn=stop_training_action,
+                    inputs=[],
+                    outputs=[train_status, start_btn, stop_btn],
+                )
+                refresh_logs_btn.click(
+                    fn=read_logs,
+                    inputs=[],
+                    outputs=log_output,
+                )
+
+                def auto_refresh():
+                    status, start_upd, stop_upd = check_training_status()
+                    logs = read_logs()
+                    eval_progress = read_eval_logs()
+                    return status or "Idle", start_upd, stop_upd, logs, eval_progress
+
+                training_timer = gr.Timer(1)
+                training_timer.tick(
+                    fn=auto_refresh,
+                    inputs=[],
+                    outputs=[train_status, start_btn, stop_btn, log_output, eval_output],
                 )
                 stop_btn.click(
                     fn=stop_training_action,
