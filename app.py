@@ -169,6 +169,20 @@ def load_data_action(
         return f"Error loading data: {e}\n{f.getvalue()}"
 
 
+def save_data_paths_action(local_train_str, local_test_str, online_train_str, online_test_str):
+    if local_train_str:
+        state.config.local_train_datasets = [p.strip() for p in local_train_str.split("\n") if p.strip()]
+    if local_test_str:
+        state.config.local_test_datasets = [p.strip() for p in local_test_str.split("\n") if p.strip()]
+    if online_train_str:
+        try:
+            state.config.online_train_datasets = json.loads(online_train_str)
+        except json.JSONDecodeError:
+            return "Invalid JSON for online train datasets"
+    state.config.save(CONFIG_SAVE_PATH)
+    return f"Dataset paths saved to {CONFIG_SAVE_PATH}!"
+
+
 # ─── TRAINING ─────────────────────────────────────────────
 
 def start_training_action(model_name):
@@ -451,7 +465,7 @@ def build_app():
                         local_train = gr.Textbox(
                             label="Local Train Datasets (paths)",
                             lines=6,
-                            value="\n".join(TrainingConfig().local_train_datasets),
+                            value="\n".join(state.config.local_train_datasets),
                         )
                         online_train = gr.Textbox(
                             label="Online Train Datasets (JSON list)",
@@ -462,7 +476,7 @@ def build_app():
                         local_test = gr.Textbox(
                             label="Local Test Datasets (paths)",
                             lines=6,
-                            value="\n".join(TrainingConfig().local_test_datasets),
+                            value="\n".join(state.config.local_test_datasets),
                         )
                         online_test = gr.Textbox(
                             label="Online Test Datasets (JSON list)",
@@ -472,11 +486,17 @@ def build_app():
 
                 with gr.Row():
                     load_data_btn = gr.Button("Load & Preview Datasets", variant="primary")
+                    save_paths_btn = gr.Button("Save Dataset Paths", variant="secondary")
 
                 data_status = gr.Textbox(label="Dataset Info", lines=15, interactive=False)
 
                 load_data_btn.click(
                     fn=load_data_action,
+                    inputs=[local_train, local_test, online_train, online_test],
+                    outputs=data_status,
+                )
+                save_paths_btn.click(
+                    fn=save_data_paths_action,
                     inputs=[local_train, local_test, online_train, online_test],
                     outputs=data_status,
                 )
