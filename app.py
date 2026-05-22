@@ -1,5 +1,6 @@
 import os
 import json
+import ast
 import threading
 import queue
 import io
@@ -233,6 +234,34 @@ def stop_training_action():
     )
 
 
+def _format_log_line(text):
+    """Format training metrics dict into a clean single-line summary."""
+    text = text.strip()
+    if text.startswith("{") and text.endswith("}"):
+        try:
+            d = ast.literal_eval(text)
+            parts = []
+            if "epoch" in d:
+                parts.append(f"epoch={d['epoch']:.2f}")
+            if "step" in d:
+                parts.append(f"step={d['step']}")
+            if "loss" in d:
+                parts.append(f"loss={d['loss']:.4f}")
+            if "grad_norm" in d:
+                parts.append(f"grad_norm={d['grad_norm']:.2f}")
+            if "learning_rate" in d:
+                parts.append(f"lr={d['learning_rate']:.2e}")
+            if "eval_loss" in d:
+                parts.append(f"eval_loss={d['eval_loss']:.4f}")
+            if "wer" in d:
+                parts.append(f"wer={d['wer']:.2f}%")
+            if parts:
+                return " | ".join(parts)
+        except (ValueError, SyntaxError, KeyError):
+            pass
+    return text
+
+
 def read_logs():
     if state.log_queue:
         while not state.log_queue.empty():
@@ -242,7 +271,7 @@ def read_logs():
                 if "|" in text and "%" in text:
                     state.progress_text = text
                 else:
-                    state.log_buffer.append(text)
+                    state.log_buffer.append(_format_log_line(text))
             except queue.Empty:
                 break
     output = "\n".join(state.log_buffer)
