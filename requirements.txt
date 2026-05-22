@@ -1,0 +1,11 @@
+gradio>=4.0,<6.0
+transformers>=4.30.0
+torch>=2.0.0
+datasets>=2.14.0
+evaluate>=0.4.0
+accelerate>=0.20.0
+wandb>=0.15.0
+torch-audiomentations>=0.11.0
+matplotlib>=3.7.0
+soundfile>=0.12.0
+librosa>=0.10.0
