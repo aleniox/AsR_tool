@@ -296,8 +296,13 @@ def stop_training_action():
     )
 
 
+def _clean_ansi(text):
+    import re
+    return re.sub(r'\x1b\[[0-9;]*[A-Za-z]', '', text)
+
+
 def _format_log_line(text):
-    text = text.strip()
+    text = _clean_ansi(text).strip()
     if text.startswith("{") and text.endswith("}"):
         try:
             d = ast.literal_eval(text)
@@ -354,7 +359,9 @@ def read_eval_logs():
         while not state.eval_queue.empty():
             try:
                 text = state.eval_queue.get_nowait()
-                state.eval_buffer.append(text)
+                cleaned = _clean_ansi(text).strip()
+                if cleaned:
+                    state.eval_buffer.append(cleaned)
             except queue.Empty:
                 break
     return "\n".join(state.eval_buffer[-50:])

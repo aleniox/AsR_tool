@@ -43,6 +43,10 @@ def compute_metrics(pred, tokenizer):
 
 
 class WhisperTrainer(Seq2SeqTrainer):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._in_eval = False
+
     def prediction_step(self, model, inputs, prediction_loss_only, ignore_keys=None):
         has_labels = "labels" in inputs
         if has_labels:
@@ -63,6 +67,13 @@ class WhisperTrainer(Seq2SeqTrainer):
             generated_tokens = generated_tokens.sequences
 
         return (None, generated_tokens, labels)
+
+    def evaluate(self, *args, **kwargs):
+        self._in_eval = True
+        try:
+            return super().evaluate(*args, **kwargs)
+        finally:
+            self._in_eval = False
 
 
 def build_training_args(config: TrainingConfig, output_dir: str = None) -> Seq2SeqTrainingArguments:
@@ -180,22 +191,16 @@ def run_training(trainer: WhisperTrainer, config: TrainingConfig, log_queue=None
     old_stdout = sys.stdout
     old_stderr = sys.stderr
 
-    class EvalState:
-        def __init__(self):
-            self.in_eval = False
-
-    eval_state = EvalState()
-
     class QueueWriter:
-        def __init__(self, stream, log_queue, eval_queue, eval_state):
+        def __init__(self, stream, log_queue, eval_queue, trainer):
             self.stream = stream
             self.log_queue = log_queue
             self.eval_queue = eval_queue
-            self.eval_state = eval_state
+            self.trainer = trainer
             self.line_buffer = ""
 
         def _get_queue(self):
-            return self.eval_queue if self.eval_state.in_eval else self.log_queue
+            return self.eval_queue if self.trainer._in_eval else self.log_queue
 
         def write(self, text):
             self.line_buffer += text
@@ -221,22 +226,10 @@ def run_training(trainer: WhisperTrainer, config: TrainingConfig, log_queue=None
             self.line_buffer = ""
             self.stream.flush()
 
-    # Patch trainer to detect eval start/end
-    original_evaluation_loop = trainer.evaluation_loop
-
-    def patched_evaluation_loop(*args, **kwargs):
-        eval_state.in_eval = True
-        try:
-            return original_evaluation_loop(*args, **kwargs)
-        finally:
-            eval_state.in_eval = False
-
-    trainer.evaluation_loop = patched_evaluation_loop
-
     if eval_queue is None and log_queue is not None:
         eval_queue = queue.Queue()
-    sys.stdout = QueueWriter(old_stdout, log_queue, eval_queue, eval_state)
-    sys.stderr = QueueWriter(old_stderr, log_queue, eval_queue, eval_state)
+    sys.stdout = QueueWriter(old_stdout, log_queue, eval_queue, trainer)
+    sys.stderr = QueueWriter(old_stderr, log_queue, eval_queue, trainer)
     try:
         trainer.train(resume_from_checkpoint=resume_from_checkpoint)
     finally:
