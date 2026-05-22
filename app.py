@@ -21,6 +21,8 @@ from inference import transcribe
 
 os.environ["WANDB_SILENT"] = "true"
 
+CONFIG_SAVE_PATH = "saved_config.json"
+
 
 class AppState:
     def __init__(self):
@@ -104,7 +106,8 @@ def update_config_from_ui(
     state.config.compression_ratio_threshold = float(compress_ratio)
     state.config.logprob_threshold = float(logprob_thresh)
     state.config.no_speech_threshold = float(no_speech_thresh)
-    return "Configuration saved!"
+    state.config.save(CONFIG_SAVE_PATH)
+    return f"Configuration saved to {CONFIG_SAVE_PATH}!"
 
 
 def load_model_action():
@@ -277,6 +280,13 @@ def refresh_checkpoints(output_dir):
 # ─── BUILD UI ─────────────────────────────────────────────
 
 def build_app():
+    # Load saved config if exists
+    if os.path.exists(CONFIG_SAVE_PATH):
+        try:
+            state.config = TrainingConfig.load(CONFIG_SAVE_PATH)
+        except Exception:
+            pass
+
     with gr.Blocks(title="Whisper Bilingual Training UI", theme=gr.themes.Soft()) as app:
         gr.Markdown("# Whisper Bilingual Training & Inference UI")
         gr.Markdown("Train Whisper on Vietnamese + English bilingual datasets")
@@ -287,77 +297,77 @@ def build_app():
                 with gr.Group():
                     gr.Markdown("### Model & Output")
                     model_name = gr.Textbox(
-                        label="Model Name or Path", value="openai/whisper-medium"
+                        label="Model Name or Path", value=state.config.model_name_or_path
                     )
                     output_dir = gr.Textbox(
-                        label="Output Directory", value="weights/whisper-medium-bilingual-vi-en"
+                        label="Output Directory", value=state.config.output_dir
                     )
 
                 with gr.Group():
                     gr.Markdown("### Training Hyperparameters")
                     with gr.Row():
-                        lr = gr.Number(label="Learning Rate", value=1e-5, step=1e-6)
-                        batch_size = gr.Number(label="Train Batch Size", value=2, step=1, precision=0)
-                        grad_accum = gr.Number(label="Gradient Accumulation Steps", value=4, step=1, precision=0)
+                        lr = gr.Number(label="Learning Rate", value=state.config.learning_rate, step=1e-6)
+                        batch_size = gr.Number(label="Train Batch Size", value=state.config.per_device_train_batch_size, step=1, precision=0)
+                        grad_accum = gr.Number(label="Gradient Accumulation Steps", value=state.config.gradient_accumulation_steps, step=1, precision=0)
                     with gr.Row():
-                        epochs = gr.Number(label="Num Epochs", value=2, step=1, precision=0)
-                        warmup = gr.Number(label="Warmup Steps", value=500, step=10, precision=0)
-                        eval_batch_size = gr.Number(label="Eval Batch Size", value=1, step=1, precision=0)
+                        epochs = gr.Number(label="Num Epochs", value=state.config.num_train_epochs, step=1, precision=0)
+                        warmup = gr.Number(label="Warmup Steps", value=state.config.warmup_steps, step=10, precision=0)
+                        eval_batch_size = gr.Number(label="Eval Batch Size", value=state.config.per_device_eval_batch_size, step=1, precision=0)
                     with gr.Row():
-                        eval_steps = gr.Number(label="Eval Steps", value=1000, step=100, precision=0)
-                        save_steps = gr.Number(label="Save Steps", value=1000, step=100, precision=0)
-                        logging_steps = gr.Number(label="Logging Steps", value=25, step=5, precision=0)
+                        eval_steps = gr.Number(label="Eval Steps", value=state.config.eval_steps, step=100, precision=0)
+                        save_steps = gr.Number(label="Save Steps", value=state.config.save_steps, step=100, precision=0)
+                        logging_steps = gr.Number(label="Logging Steps", value=state.config.logging_steps, step=5, precision=0)
                     with gr.Row():
-                        save_total = gr.Number(label="Save Total Limit", value=3, step=1, precision=0)
-                        max_label_len = gr.Number(label="Max Label Length", value=448, step=8, precision=0)
-                        gen_max_len = gr.Number(label="Generation Max Length", value=440, step=10, precision=0)
+                        save_total = gr.Number(label="Save Total Limit", value=state.config.save_total_limit, step=1, precision=0)
+                        max_label_len = gr.Number(label="Max Label Length", value=state.config.max_label_length, step=8, precision=0)
+                        gen_max_len = gr.Number(label="Generation Max Length", value=state.config.generation_max_length, step=10, precision=0)
                     with gr.Row():
-                        gen_beams = gr.Number(label="Num Beams", value=1, step=1, precision=0)
-                        max_test = gr.Number(label="Max Test Samples", value=2000, step=100, precision=0)
+                        gen_beams = gr.Number(label="Num Beams", value=state.config.generation_num_beams, step=1, precision=0)
+                        max_test = gr.Number(label="Max Test Samples", value=state.config.max_test_samples, step=100, precision=0)
 
                 with gr.Group():
                     gr.Markdown("### Strategy & Reporting")
                     with gr.Row():
-                        eval_strategy = gr.Dropdown(label="Eval Strategy", choices=["steps", "epoch", "no"], value="steps")
-                        save_strategy = gr.Dropdown(label="Save Strategy", choices=["steps", "epoch", "no"], value="steps")
-                        report_to_val = gr.Dropdown(label="Report To", choices=["none", "wandb", "tensorboard", "all"], value="wandb")
+                        eval_strategy = gr.Dropdown(label="Eval Strategy", choices=["steps", "epoch", "no"], value=state.config.eval_strategy)
+                        save_strategy = gr.Dropdown(label="Save Strategy", choices=["steps", "epoch", "no"], value=state.config.save_strategy)
+                        report_to_val = gr.Dropdown(label="Report To", choices=["none", "wandb", "tensorboard", "all"], value=state.config.report_to)
                     with gr.Row():
-                        metric_best = gr.Textbox(label="Metric for Best Model", value="wer")
-                        label_names_str = gr.Textbox(label="Label Names (JSON)", value='["labels"]')
-                        grad_ckpt_kwargs = gr.Textbox(label="Grad Checkpoint Kwargs (JSON)", value='{"use_reentrant": false}')
+                        metric_best = gr.Textbox(label="Metric for Best Model", value=state.config.metric_for_best_model)
+                        label_names_str = gr.Textbox(label="Label Names (JSON)", value=state.config.label_names)
+                        grad_ckpt_kwargs = gr.Textbox(label="Grad Checkpoint Kwargs (JSON)", value=state.config.gradient_checkpointing_kwargs)
                     with gr.Row():
-                        predict_gen = gr.Checkbox(label="Predict with Generate", value=True)
-                        remove_cols = gr.Checkbox(label="Remove Unused Columns", value=False)
-                        load_best = gr.Checkbox(label="Load Best Model at End", value=True)
+                        predict_gen = gr.Checkbox(label="Predict with Generate", value=state.config.predict_with_generate)
+                        remove_cols = gr.Checkbox(label="Remove Unused Columns", value=state.config.remove_unused_columns)
+                        load_best = gr.Checkbox(label="Load Best Model at End", value=state.config.load_best_model_at_end)
                     with gr.Row():
-                        greater_better = gr.Checkbox(label="Greater is Better", value=False)
-                        pred_loss_only = gr.Checkbox(label="Prediction Loss Only", value=False)
-                        grad_ckpt = gr.Checkbox(label="Gradient Checkpointing", value=False)
+                        greater_better = gr.Checkbox(label="Greater is Better", value=state.config.greater_is_better)
+                        pred_loss_only = gr.Checkbox(label="Prediction Loss Only", value=state.config.prediction_loss_only)
+                        grad_ckpt = gr.Checkbox(label="Gradient Checkpointing", value=state.config.gradient_checkpointing)
 
                 with gr.Group():
                     gr.Markdown("### Generation Config (Anti-Hallucination)")
                     with gr.Row():
-                        no_repeat = gr.Number(label="No Repeat Ngram Size", value=5, step=1, precision=0)
-                        compress_ratio = gr.Number(label="Compression Ratio Threshold", value=2.4, step=0.1)
+                        no_repeat = gr.Number(label="No Repeat Ngram Size", value=state.config.no_repeat_ngram_size, step=1, precision=0)
+                        compress_ratio = gr.Number(label="Compression Ratio Threshold", value=state.config.compression_ratio_threshold, step=0.1)
                     with gr.Row():
-                        logprob_thresh = gr.Number(label="Logprob Threshold", value=-1.0, step=0.1)
-                        no_speech_thresh = gr.Number(label="No Speech Threshold", value=0.4, step=0.05)
+                        logprob_thresh = gr.Number(label="Logprob Threshold", value=state.config.logprob_threshold, step=0.1)
+                        no_speech_thresh = gr.Number(label="No Speech Threshold", value=state.config.no_speech_threshold, step=0.05)
                     with gr.Row():
-                        cond_prev = gr.Checkbox(label="Condition on Previous Text", value=False)
-                        predict_ts = gr.Checkbox(label="Predict Timestamps", value=False)
+                        cond_prev = gr.Checkbox(label="Condition on Previous Text", value=state.config.condition_on_previous_text)
+                        predict_ts = gr.Checkbox(label="Predict Timestamps", value=state.config.predict_timestamps)
 
                 with gr.Row():
-                    fp16 = gr.Checkbox(label="FP16", value=True)
-                    bf16 = gr.Checkbox(label="BF16", value=False)
-                    augmentation = gr.Checkbox(label="Apply Augmentation", value=True)
-                    resume = gr.Checkbox(label="Resume from Checkpoint", value=True)
+                    fp16 = gr.Checkbox(label="FP16", value=state.config.fp16)
+                    bf16 = gr.Checkbox(label="BF16", value=state.config.bf16)
+                    augmentation = gr.Checkbox(label="Apply Augmentation", value=state.config.apply_augmentation)
+                    resume = gr.Checkbox(label="Resume from Checkpoint", value=state.config.resume_from_checkpoint)
 
                 with gr.Group():
                     gr.Markdown("### WandB & GPU")
                     with gr.Row():
-                        wandb_project = gr.Textbox(label="WandB Project", value="whisper-small-bilingual")
-                        wandb_key = gr.Textbox(label="WandB API Key", type="password")
-                        gpu_device = gr.Textbox(label="CUDA Device", value="1")
+                        wandb_project = gr.Textbox(label="WandB Project", value=state.config.wandb_project)
+                        wandb_key = gr.Textbox(label="WandB API Key", type="password", value=state.config.wandb_api_key)
+                        gpu_device = gr.Textbox(label="CUDA Device", value=state.config.cuda_visible_devices)
 
                 with gr.Row():
                     save_config_btn = gr.Button("Save Configuration", variant="primary")
