@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 import torch
 import transformers
@@ -172,7 +173,22 @@ def run_training(trainer: WhisperTrainer, config: TrainingConfig, log_queue=None
     if stop_event:
         trainer.add_callback(StopCallback())
 
-    trainer.train(resume_from_checkpoint=resume_from_checkpoint)
+    # Redirect stdout to capture all Trainer output into log_queue
+    old_stdout = sys.stdout
+    class QueueWriter:
+        def write(self, text):
+            if text.strip():
+                if log_queue:
+                    log_queue.put(text)
+            old_stdout.write(text)
+        def flush(self):
+            old_stdout.flush()
+
+    sys.stdout = QueueWriter()
+    try:
+        trainer.train(resume_from_checkpoint=resume_from_checkpoint)
+    finally:
+        sys.stdout = old_stdout
 
     final_dir = f"{config.output_dir}/final_model"
     trainer.save_model(final_dir)

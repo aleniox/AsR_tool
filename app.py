@@ -35,6 +35,7 @@ class AppState:
         self.training_thread = None
         self.stop_event = None
         self.log_queue = None
+        self.log_buffer = []
         self.training_running = False
 
     def cleanup_training(self):
@@ -225,14 +226,13 @@ def stop_training_action():
 
 
 def read_logs():
-    logs = ""
     if state.log_queue:
         while not state.log_queue.empty():
             try:
-                logs += state.log_queue.get_nowait() + "\n"
+                state.log_buffer.append(state.log_queue.get_nowait())
             except queue.Empty:
                 break
-    return logs
+    return "\n".join(state.log_buffer)
 
 
 def check_training_status():
